@@ -2,18 +2,17 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Nelder_Mead
 {
     class Point
     {
         public List<double> x { get; set; }
-
         public Point(List<double> x)
         {
             this.x = new List<double>(x);
         }
-
         public void Show()
         {
             for (int i = 0; i < x.Count; i++)
@@ -21,9 +20,8 @@ namespace Nelder_Mead
                 Console.WriteLine(x[i]);
             }
         }
-
     }
-    class M2
+    class Nelder_MeadAlg
     {
         double eps;
         double alpha;
@@ -34,9 +32,11 @@ namespace Nelder_Mead
         List<double> x;
         List<double> x0;
         List<Point> p;
-        int key;
-
-        public M2(List<double> x0, List<double> lowerBound, List<double> upperBound, double eps, double alpha, double beta, double gamma, int key)
+        public delegate double Func(List<double> x);
+        Func countFunc;
+        enum Bounds { inBounds, outOfBounds }
+        enum State { run, stop }
+        public Nelder_MeadAlg(List<double> x0, List<double> lowerBound, List<double> upperBound, double eps, double alpha, double beta, double gamma, Func f)
         {
             this.x0 = new List<double>(x0);
 
@@ -49,55 +49,32 @@ namespace Nelder_Mead
             this.alpha = alpha;
             this.beta = beta;
             this.gamma = gamma;
-            this.key = key;
+            this.countFunc = f;
         }
-
-        private int InBounds(List<double> l)
+        private int InBounds(List<double> x)
         {
-            int key = 0;
+            Bounds key = Bounds.inBounds;
             for (int i = 0; i < x.Count; i++)
             {
-                if ((l[i] < lowerBound[i]) || (l[i] > upperBound[i]))
+                if ((x[i] < lowerBound[i]) || (x[i] > upperBound[i]))
                 {
-                    key = 1;
+                    key = Bounds.outOfBounds;
                 }
             }
-            return key;
+            return (int)key;
         }
-
         private Point CreatePoint(List<double> u, Random r)
         {
             List<double> p = new List<double>(u);
             for (int i = 0; i < x.Count; i++)
             {
-                //p[i] = p[i] + r.NextDouble()*100;
                 p[i] = p[i] + r.NextDouble();
             }
             Point pnew = new Point(p);
             return pnew;
         }
-
-        private double CountFunc(List<double> x)
-        {
-            double result = 0;
-            switch (this.key)
-            {
-                case 1:
-                    result = (double)(100.0 * Math.Pow((Math.Pow(x[0], 2) - x[1]), 2) + Math.Pow(1 - x[0], 2));
-                    break;
-                case 2:
-                    result = (double)(100.0 * Math.Pow((x[1] - Math.Pow(x[0], 3)), 2) + Math.Pow(1 - x[0], 2));
-                    break;
-                case 3:
-                    result = Math.Pow((x[0] + 10 * x[1]), 2) + 5 * Math.Pow((x[2] - x[3]), 2) + Math.Pow((x[1] - 2 * x[2]), 4) + 10 * Math.Pow((x[0] - x[3]), 4);
-                    break;
-            }
-            return result;
-        }
-
         public void InitiateMethod2()
         {
-
             List<double> xlr = new List<double>(x0);
             List<double> xgr = new List<double>(x0);
             List<double> xhr = new List<double>(x0);
@@ -105,7 +82,6 @@ namespace Nelder_Mead
             double flr = 10000;
             double fgr = 10000;
             double fhr = 10000;
-
 
             Random r = new Random();
 
@@ -116,20 +92,20 @@ namespace Nelder_Mead
                 {
                     p.Add(CreatePoint(x0, r));
                 }
-                int key = 0;
 
+                State key = State.run;
 
                 Dictionary<List<double>, double> grp = new Dictionary<List<double>, double>();
                 foreach (var item in p)
                 {
-                    double temp = CountFunc(item.x);
+                    double temp = countFunc(item.x);
                     grp.Add(item.x, temp);
                 }
 
-                grp.Add(x0, CountFunc(x0));
+                grp.Add(x0, countFunc(x0));
 
                 int step = 0;
-                while (key == 0)
+                while (key == State.run)
                 {
                     var asc = grp.OrderBy(d => d.Value).ToDictionary(d => d.Key, d => d.Value);
 
@@ -166,16 +142,7 @@ namespace Nelder_Mead
                         xr[i] = (1 + alpha) * xc[i] - alpha * xh[i];
                     }
 
-                    double fr = 0;
-
-                    if (InBounds(xr) == 0)
-                    {
-                        fr = CountFunc(xr);
-                    }
-                    else
-                    {
-                        fr = 1000000;
-                    }
+                    double fr = (InBounds(xr) == 0) ? countFunc(xr) : 1000000;
 
                     List<double> xe = new List<double>(x0);
 
@@ -187,30 +154,21 @@ namespace Nelder_Mead
                                 {
                                     xe[i] = (1 - beta) * xc[i] + beta * xr[i];
                                 }
-                                double fe = 0;
 
-                                if (InBounds(xe) == 0)
-                                {
-                                    fe = CountFunc(xe);
-                                }
-                                else
-                                {
-                                    fe = 1000000;
-                                }
-
+                                double fe = (InBounds(xe) == 0) ? countFunc(xe) : 1000000;
 
                                 if (fe < fl)
                                 {
                                     for (int i = 0; i < grp.Count; i++)
                                     {
-                                        if (grp.ElementAt(i).Value == CountFunc(xh))
+                                        if (grp.ElementAt(i).Value == countFunc(xh))
                                         {
                                             grp.Remove(grp.ElementAt(i).Key);
                                         }
                                     }
 
                                     xh = new List<double>(xe);
-                                    grp.Add(xh, CountFunc(xh));
+                                    grp.Add(xh, countFunc(xh));
                                 }
                                 else
                                 {
@@ -218,13 +176,13 @@ namespace Nelder_Mead
                                     {
                                         for (int i = 0; i < grp.Count; i++)
                                         {
-                                            if (grp.ElementAt(i).Value == CountFunc(xh))
+                                            if (grp.ElementAt(i).Value == countFunc(xh))
                                             {
                                                 grp.Remove(grp.ElementAt(i).Key);
                                             }
                                         }
                                         xh = new List<double>(xr);
-                                        grp.Add(xh, CountFunc(xh));
+                                        grp.Add(xh, countFunc(xh));
                                     }
                                 }
                             }
@@ -234,26 +192,26 @@ namespace Nelder_Mead
                             {
                                 for (int i = 0; i < grp.Count; i++)
                                 {
-                                    if (grp.ElementAt(i).Value == CountFunc(xh))
+                                    if (grp.ElementAt(i).Value == countFunc(xh))
                                     {
                                         grp.Remove(grp.ElementAt(i).Key);
                                     }
                                 }
                                 xh = new List<double>(xr);
-                                grp.Add(xh, CountFunc(xh));
+                                grp.Add(xh, countFunc(xh));
                             }
                             break;
                         case var expression when ((fg < fr) && (fr < fh)):
                             {
                                 for (int i = 0; i < grp.Count; i++)
                                 {
-                                    if (grp.ElementAt(i).Value == CountFunc(xh))
+                                    if (grp.ElementAt(i).Value == countFunc(xh))
                                     {
                                         grp.Remove(grp.ElementAt(i).Key);
                                     }
                                 }
                                 xh = new List<double>(xr);
-                                grp.Add(xh, CountFunc(xh));
+                                grp.Add(xh, countFunc(xh));
 
                                 List<double> xs = new List<double>(x0);
 
@@ -261,7 +219,7 @@ namespace Nelder_Mead
                                 {
                                     xs[i] = gamma * xh[i] - (1 - gamma) * xc[i];
                                 }
-                                double fs = CountFunc(xs);
+                                double fs = countFunc(xs);
 
                                 asc = grp.OrderBy(d => d.Value).ToDictionary(d => d.Key, d => d.Value);
 
@@ -269,13 +227,13 @@ namespace Nelder_Mead
                                 {
                                     for (int i = 0; i < grp.Count; i++)
                                     {
-                                        if (grp.ElementAt(i).Value == CountFunc(xh))
+                                        if (grp.ElementAt(i).Value == countFunc(xh))
                                         {
                                             grp.Remove(grp.ElementAt(i).Key);
                                         }
                                     }
                                     xh = new List<double>(xs);
-                                    grp.Add(xh, CountFunc(xh));
+                                    grp.Add(xh, countFunc(xh));
                                 }
                                 else
                                 {
@@ -291,7 +249,7 @@ namespace Nelder_Mead
                                             xi[i] = xl[i] + (temp[i] - xl[i]) / 2;
                                         }
                                         grp.Remove(temp1);
-                                        grp.Add(xi, CountFunc(xi));
+                                        grp.Add(xi, countFunc(xi));
 
                                     }
                                 }
@@ -305,7 +263,7 @@ namespace Nelder_Mead
                                 {
                                     xs[i] = gamma * xh[i] - (1 - gamma) * xc[i];
                                 }
-                                double fs = CountFunc(xs);
+                                double fs = countFunc(xs);
 
                                 asc = grp.OrderBy(d => d.Value).ToDictionary(d => d.Key, d => d.Value);
 
@@ -313,13 +271,13 @@ namespace Nelder_Mead
                                 {
                                     for (int i = 0; i < grp.Count; i++)
                                     {
-                                        if (grp.ElementAt(i).Value == CountFunc(xh))
+                                        if (grp.ElementAt(i).Value == countFunc(xh))
                                         {
                                             grp.Remove(grp.ElementAt(i).Key);
                                         }
                                     }
                                     xh = new List<double>(xs);
-                                    grp.Add(xh, CountFunc(xh));
+                                    grp.Add(xh, countFunc(xh));
                                 }
                                 else
                                 {
@@ -335,7 +293,7 @@ namespace Nelder_Mead
                                             xi[i] = xl[i] + (temp[i] - xl[i]) / 2;
                                         }
                                         grp.Remove(temp1);
-                                        grp.Add(xi, CountFunc(xi));
+                                        grp.Add(xi, countFunc(xi));
                                     }
                                 }
                             }
@@ -361,43 +319,43 @@ namespace Nelder_Mead
                     }
                     foreach (var item in asc1)
                     {
-                        double temp0 = Math.Pow(item.Value - CountFunc(xl), 2) / x.Count;
+                        double temp0 = Math.Pow(item.Value - countFunc(xl), 2) / x.Count;
                         sum0 += temp0;
                     }
                     double sum = Math.Sqrt(sum0);
 
-                    if ((sum < eps) || (step > 300))
-                    {
-                        key = 1;
-                    }
+                    key = (sum < eps) || (step > 300) ? State.stop : State.run;
+
                     step++;
                 }
-
             }
             Console.WriteLine("Решение:");
             Console.WriteLine("xlr");
+
             for (int i = 0; i < x.Count; i++)
             {
                 Console.WriteLine("{0}", xlr[i]);
             }
 
-            Console.WriteLine("Q = {0}", CountFunc(xlr));
+            Console.WriteLine("Q = {0}", countFunc(xlr));
 
             Console.WriteLine("xgr");
+
             for (int i = 0; i < x.Count; i++)
             {
                 Console.WriteLine("{0}", xgr[i]);
             }
 
-            Console.WriteLine("Q = {0}", CountFunc(xgr));
+            Console.WriteLine("Q = {0}", countFunc(xgr));
 
             Console.WriteLine("xhr");
+
             for (int i = 0; i < x.Count; i++)
             {
                 Console.WriteLine("{0}", xhr[i]);
             }
 
-            Console.WriteLine("Q = {0}", CountFunc(xhr));
+            Console.WriteLine("Q = {0}", countFunc(xhr));
         }
     }
 }
